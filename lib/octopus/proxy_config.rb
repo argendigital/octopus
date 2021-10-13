@@ -233,7 +233,7 @@ module Octopus
         )
         db_config = ActiveRecord::DatabaseConfigurations::HashConfig.new(
           original_db_config.env_name,
-          original_db_config.spec_name,
+          original_db_config.name,
           db_config_hash_with_shard
         )
         spec = ActiveRecord::ConnectionAdapters::PoolConfig.new(ActiveRecord::Base, db_config)
