@@ -226,7 +226,7 @@ module Octopus
         spec = ActiveRecord::ConnectionAdapters::ConnectionSpecification.new(config.dup, adapter )
       elsif Octopus.atleast_rails61?
         original_db_config = ActiveRecord::Base.connection_pool_without_octopus.db_config
-        # update db_configuration_hash with shard information for rails 6.1
+        # update db_configuration_hash with shard information for rails >= 6.1
         db_config_hash_with_shard = ActiveRecord::Base.connection_pool_without_octopus.db_config.configuration_hash.merge(
           database: config[:database],
           octopus_shard: config[:octopus_shard]
@@ -236,7 +236,11 @@ module Octopus
           original_db_config.name,
           db_config_hash_with_shard
         )
-        spec = ActiveRecord::ConnectionAdapters::PoolConfig.new(ActiveRecord::Base, db_config)
+        if Octopus.rails7?
+          spec = ActiveRecord::ConnectionAdapters::PoolConfig.new(ActiveRecord::Base, db_config, :writing, :default)
+        else
+          spec = ActiveRecord::ConnectionAdapters::PoolConfig.new(ActiveRecord::Base, db_config)
+        end
       else
         name = adapter["octopus_shard"]
         spec = ActiveRecord::ConnectionAdapters::ConnectionSpecification.new(name, config.dup, adapter)
