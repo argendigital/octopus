@@ -228,7 +228,14 @@ module Octopus
         original_db_config = ActiveRecord::Base.connection_pool_without_octopus.db_config
         # update db_configuration_hash with shard information for rails 6.1
         db_config_hash_with_shard = ActiveRecord::Base.connection_pool_without_octopus.db_config.configuration_hash.merge(
+          adapter: config[:adapter],
+          host: config[:host],
+          port: config[:port],
+          username: config[:username],
+          password: config[:password],
           database: config[:database],
+          encoding: config[:encoding],
+          pool: config[:pool],
           octopus_shard: config[:octopus_shard]
         )
         db_config = ActiveRecord::DatabaseConfigurations::HashConfig.new(
