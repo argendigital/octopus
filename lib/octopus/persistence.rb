@@ -1,19 +1,27 @@
 module Octopus
   module Persistence
-    def update_attribute(*args)
-      run_on_shard { super }
+    def update_attribute(*args, **kwargs)
+      run_on_shard { super(*args, **kwargs) }
     end
 
-    def update_attributes(*args)
-      run_on_shard { super }
+    def update_attributes(*args, **kwargs)
+      run_on_shard { super(*args, **kwargs) }
     end
 
-    def update_attributes!(*args)
-      run_on_shard { super }
+    def update_attributes!(*args, **kwargs)
+      run_on_shard { super(*args, **kwargs) }
     end
 
-    def reload(*args)
-      run_on_shard { super }
+    def update(*args, **kwargs)
+      run_on_shard { super(*args, **kwargs) }
+    end
+
+    def update!(*args, **kwargs)
+      run_on_shard { super(*args, **kwargs) }
+    end
+
+    def reload(*args, **kwargs)
+      run_on_shard { super(*args, **kwargs) }
     end
 
     def delete
@@ -24,19 +32,19 @@ module Octopus
       run_on_shard { super }
     end
 
-    def touch(*args)
+    def touch(*args, **kwargs)
+      run_on_shard { super(*args, **kwargs) }
+    end
+
+    def update_column(*args, **kwargs)
       run_on_shard { super }
     end
 
-    def update_column(*args)
-      run_on_shard { super }
+    def increment!(...)
+      run_on_shard { super(...) }
     end
 
-    def increment!(*args)
-      run_on_shard { super }
-    end
-
-    def decrement!(*args)
+    def decrement!(*args, **kwargs)
       run_on_shard { super }
     end
   end
