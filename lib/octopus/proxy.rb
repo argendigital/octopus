@@ -52,16 +52,16 @@ module Octopus
       conn.update(arel, name, binds)
     end
 
-    def delete(*args, &block)
-      legacy_method_missing_logic('delete', *args, &block)
+    def delete(*args, **kwargs, &block)
+      legacy_method_missing_logic('delete', *args, **kwargs, &block)
     end
 
-    def select_all(*args, &block)
-      legacy_method_missing_logic('select_all', *args, &block)
+    def select_all(*args, **kwargs, &block)
+      legacy_method_missing_logic('select_all', *args, **kwargs, &block)
     end
 
-    def select_value(*args, &block)
-      legacy_method_missing_logic('select_value', *args, &block)
+    def select_value(*args, **kwargs, &block)
+      legacy_method_missing_logic('select_value', *args, **kwargs, &block)
     end
 
     # Rails 3.1 sets automatic_reconnect to false when it removes
@@ -117,7 +117,7 @@ module Octopus
       ) || OctopusModel.using(shard).connection.initialize_schema_migrations_table
     end
 
-    def transaction(options = {}, &block)
+    def transaction(**options, &block)
       if !sharded && current_model_replicated?
         run_queries_on_shard(Octopus.master_shard) do
           select_connection.transaction(**options, &block)
@@ -127,12 +127,12 @@ module Octopus
       end
     end
 
-    def method_missing(method, *args, &block)
-      legacy_method_missing_logic(method, *args, &block)
+    def method_missing(method, *args, **kwargs, &block)
+      legacy_method_missing_logic(method, *args, **kwargs, &block)
     end
 
-    def respond_to?(method, include_private = false)
-      super || select_connection.respond_to?(method, include_private)
+    def respond_to_missing?(method, include_private = false)
+      select_connection.respond_to?(method, include_private) || super
     end
 
     def connection_pool
@@ -177,16 +177,16 @@ module Octopus
       should_use_slaves_for_method?(method) && shards_slave_groups.try(:[], current_shard).try(:[], current_slave_group).present?
     end
 
-    def send_queries_to_shard_slave_group(method, *args, &block)
-      send_queries_to_balancer(shards_slave_groups[current_shard][current_slave_group], method, *args, &block)
+    def send_queries_to_shard_slave_group(method, *args, **kwargs, &block)
+      send_queries_to_balancer(shards_slave_groups[current_shard][current_slave_group], method, *args, **kwargs, &block)
     end
 
     def should_send_queries_to_slave_group?(method)
       should_use_slaves_for_method?(method) && slave_groups.try(:[], current_slave_group).present?
     end
 
-    def send_queries_to_slave_group(method, *args, &block)
-      send_queries_to_balancer(slave_groups[current_slave_group], method, *args, &block)
+    def send_queries_to_slave_group(method, *args, **kwargs, &block)
+      send_queries_to_balancer(slave_groups[current_slave_group], method, *args, **kwargs, &block)
     end
 
     def current_model_replicated?
@@ -210,28 +210,22 @@ module Octopus
     # @thiagopradi - This legacy method missing logic will be keep for a while for compatibility
     # and will be removed when Octopus 1.0 will be released.
     # We are planning to migrate to a much stable logic for the Proxy that doesn't require method missing.
-    def legacy_method_missing_logic(method, *args, &block)
+    def legacy_method_missing_logic(method, *args, **kwargs, &block)
       if should_clean_connection_proxy?(method)
         clean_connection_proxy
         args, preparable = handle_args(args)
-        if preparable.nil?
-          select_connection.send(method, *args, &block)
-        else
-          select_connection.send(method, *args, **preparable, &block)
-        end
+        merged_kwargs = preparable.nil? ? kwargs : kwargs.merge(preparable)
+        select_connection.send(method, *args, **merged_kwargs, &block)
       elsif should_send_queries_to_shard_slave_group?(method)
-        send_queries_to_shard_slave_group(method, *args, &block)
+        send_queries_to_shard_slave_group(method, *args, **kwargs, &block)
       elsif should_send_queries_to_slave_group?(method)
-        send_queries_to_slave_group(method, *args, &block)
+        send_queries_to_slave_group(method, *args, **kwargs, &block)
       elsif should_send_queries_to_replicated_databases?(method)
-        send_queries_to_selected_slave(method, *args, &block)
+        send_queries_to_selected_slave(method, *args, **kwargs, &block)
       else
         args, preparable = handle_args(args)
-        val = if preparable.nil?
-          select_connection.send(method, *args, &block)
-        else
-          select_connection.send(method, *args, **preparable, &block)
-        end
+        merged_kwargs = preparable.nil? ? kwargs : kwargs.merge(preparable)
+        val = select_connection.send(method, *args, **merged_kwargs, &block)
 
         if val.instance_of? ActiveRecord::Result
           val.current_shard = shard_name
@@ -281,14 +275,14 @@ module Octopus
       replicated && method.to_s =~ /select/ && !block && !slaves_grouped?
     end
 
-    def send_queries_to_selected_slave(method, *args, &block)
+    def send_queries_to_selected_slave(method, *args, **kwargs, &block)
       if current_model.replicated || fully_replicated?
         selected_slave = slaves_load_balancer.next current_load_balance_options
       else
         selected_slave = Octopus.master_shard
       end
 
-      send_queries_to_slave(selected_slave, method, *args, &block)
+      send_queries_to_slave(selected_slave, method, *args, **kwargs, &block)
     end
 
     # We should use slaves if and only if its safe to do so.
@@ -310,20 +304,17 @@ module Octopus
 
     # Temporarily switch `current_shard` to the next slave in a slave group and send queries to it
     # while preserving `current_shard`
-    def send_queries_to_balancer(balancer, method, *args, &block)
-      send_queries_to_slave(balancer.next(current_load_balance_options), method, *args, &block)
+    def send_queries_to_balancer(balancer, method, *args, **kwargs, &block)
+      send_queries_to_slave(balancer.next(current_load_balance_options), method, *args, **kwargs, &block)
     end
 
     # Temporarily switch `current_shard` to the specified slave and send queries to it
     # while preserving `current_shard`
-    def send_queries_to_slave(slave, method, *args, &block)
+    def send_queries_to_slave(slave, method, *args, **kwargs, &block)
       using_shard(slave) do
         args, preparable = handle_args(args)
-        val = if preparable.nil?
-          select_connection.send(method, *args, &block)
-        else
-          select_connection.send(method, *args, **preparable, &block)
-        end
+        merged_kwargs = preparable.nil? ? kwargs : kwargs.merge(preparable)
+        val = select_connection.send(method, *args, **merged_kwargs, &block)
         if val.instance_of? ActiveRecord::Result
           val.current_shard = slave
         end
